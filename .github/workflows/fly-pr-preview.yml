@@ -22,7 +22,7 @@ jobs:
 
       - name: Deploy Preview App
         id: deploy
-        uses: superfly/fly-pr-review-apps@master
+        uses: superfly/fly-pr-review-apps@main
         with:
           name: pr-${{ github.event.number }}-space-invaders
           region: ewr
