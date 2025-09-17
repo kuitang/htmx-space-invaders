@@ -6,7 +6,7 @@ A Space Invaders game built with HTMX and server-side rendering, demonstrating t
 
 - **Pure HTMX + Server-Side Rendering**: All game logic runs on the server
 - **WebSocket-based real-time updates**: Using HTMX WebSocket extension for live gameplay
-- **144 FPS game loop**: Smooth gameplay with delta-time based physics
+- **60 FPS game loop**: Smooth gameplay tuned for desktop and mobile devices
 - **Mobile-first design**: Touch controls with modern neumorphic button design
 - **Frame acknowledgment system**: Tracks client FPS and network latency
 - **Keyboard and touch support**: Works on desktop and mobile devices
@@ -39,8 +39,8 @@ The game demonstrates an unconventional but interesting architecture:
 
 - **Server maintains all game state**: Player position, alien position, bullets, collisions
 - **Client sends only input events**: Key presses/releases via WebSocket
-- **Server sends HTML fragments**: Each frame is rendered as HTML and sent to client
-- **HTMX handles DOM updates**: Out-of-band swaps update the game container
+- **Server streams targeted HTML fragments**: Position updates ship via CSS transforms while counters use out-of-band swaps
+- **HTMX handles DOM updates**: Minimal fragments keep the client workload light
 
 ### Performance Metrics
 
