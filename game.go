@@ -3,38 +3,39 @@ package main
 import (
 	"fmt"
 	"log"
-	"math"
 	"math/rand"
 	"strings"
 	"time"
 )
 
 type Bullet struct {
-	X     float64
-	Y     float64
-	VelY  float64
+	ID            int
+	X             float64
+	Y             float64
+	VelY          float64
 	IsAlienBullet bool
 }
 
 type Game struct {
-	SpaceshipX      float64
-	AlienX          float64
-	AlienY          float64
-	AlienVelX       float64
-	Bullets         []Bullet
+	SpaceshipX   float64
+	AlienX       float64
+	AlienY       float64
+	AlienVelX    float64
+	Bullets      []Bullet
+	NextBulletID int
 
-	MovingLeft      bool
-	MovingRight     bool
+	MovingLeft  bool
+	MovingRight bool
 
-	LastShootTime   time.Time
-	LastAlienShoot  time.Time
+	LastShootTime  time.Time
+	LastAlienShoot time.Time
 
-	FrameCount      int
-	FPSTime         time.Time
-	CurrentFPS      float64
+	FrameCount int
+	FPSTime    time.Time
+	CurrentFPS float64
 
-	GameOver        bool
-	Score           int
+	GameOver bool
+	Score    int
 
 	SpaceshipWidth  float64
 	SpaceshipHeight float64
@@ -43,25 +44,30 @@ type Game struct {
 	BulletWidth     float64
 	BulletHeight    float64
 
-	GameWidth       float64
-	GameHeight      float64
+	GameWidth  float64
+	GameHeight float64
 
-	AlienDead       bool
-	AlienDeathTime  time.Time
-	SpaceshipDead   bool
+	AlienDead          bool
+	AlienDeathTime     time.Time
+	SpaceshipDead      bool
 	SpaceshipDeathTime time.Time
 
 	// Frame acknowledgment tracking
-	FrameID         uint64
-	FrameSentTimes  map[uint64]time.Time
-	RoundTripTimes  []float64
-	ClientFPS       float64
-	AvgLatency      float64
-	LastAckTime     time.Time
-	AckCount        int
+	FrameID        uint64
+	FrameSentTimes map[uint64]time.Time
+	RoundTripTimes []float64
+	ClientFPS      float64
+	AvgLatency     float64
+	LastAckTime    time.Time
+	AckCount       int
 
 	// Session tracking
-	SessionID       string
+	SessionID string
+
+	VisibleBullets      map[int]struct{}
+	LastSpaceshipSprite string
+	LastAlienSprite     string
+	LastGameOver        bool
 }
 
 func NewGame() *Game {
@@ -83,6 +89,7 @@ func NewGame() *Game {
 		FrameSentTimes:  make(map[uint64]time.Time),
 		RoundTripTimes:  make([]float64, 0, 30), // Keep last 30 RTT samples
 		LastAckTime:     time.Now(),
+		VisibleBullets:  make(map[int]struct{}),
 	}
 }
 
@@ -112,12 +119,15 @@ func (g *Game) ProcessInput(action string, inputType string) {
 		}
 	case "shoot":
 		if inputType == "keydown" && time.Since(g.LastShootTime) > 500*time.Millisecond {
-			g.Bullets = append(g.Bullets, Bullet{
-				X:     g.SpaceshipX + g.SpaceshipWidth/2 - g.BulletWidth/2,
-				Y:     g.GameHeight - 50 - g.SpaceshipHeight,
-				VelY:  -400,
+			bullet := Bullet{
+				ID:            g.NextBulletID,
+				X:             g.SpaceshipX + g.SpaceshipWidth/2 - g.BulletWidth/2,
+				Y:             g.GameHeight - 50 - g.SpaceshipHeight,
+				VelY:          -400,
 				IsAlienBullet: false,
-			})
+			}
+			g.NextBulletID++
+			g.Bullets = append(g.Bullets, bullet)
 			g.LastShootTime = time.Now()
 		}
 	}
@@ -171,7 +181,7 @@ func (g *Game) Update(deltaTime float64) {
 	if g.AlienDead && time.Since(g.AlienDeathTime) > 2*time.Second {
 		g.AlienDead = false
 		g.AlienX = rand.Float64() * (g.GameWidth - g.AlienWidth)
-		g.AlienY = 50 // Spawn at top
+		g.AlienY = 50     // Spawn at top
 		g.AlienVelX = 100 // Reduced for smaller canvas
 		if rand.Float64() > 0.5 {
 			g.AlienVelX = -g.AlienVelX
@@ -209,18 +219,21 @@ func (g *Game) Update(deltaTime float64) {
 
 		// Alien shoots periodically
 		if time.Since(g.LastAlienShoot) > 2*time.Second {
-			g.Bullets = append(g.Bullets, Bullet{
-				X:     g.AlienX + g.AlienWidth/2 - g.BulletWidth/2,
-				Y:     g.AlienY + g.AlienHeight,
-				VelY:  200,
+			bullet := Bullet{
+				ID:            g.NextBulletID,
+				X:             g.AlienX + g.AlienWidth/2 - g.BulletWidth/2,
+				Y:             g.AlienY + g.AlienHeight,
+				VelY:          200,
 				IsAlienBullet: true,
-			})
+			}
+			g.NextBulletID++
+			g.Bullets = append(g.Bullets, bullet)
 			g.LastAlienShoot = time.Now()
 		}
 	}
 
 	// Update bullets
-	newBullets := make([]Bullet, 0)
+	newBullets := make([]Bullet, 0, len(g.Bullets))
 	for i := range g.Bullets {
 		g.Bullets[i].Y += g.Bullets[i].VelY * deltaTime
 
@@ -286,78 +299,127 @@ func (g *Game) checkAABB(x1, y1, w1, h1, x2, y2, w2, h2 float64) bool {
 func (g *Game) RenderHTML() string {
 	var html strings.Builder
 
-	if g.GameOver {
-		html.WriteString(`<div id="game-container" style="position:relative; width:360px; height:480px; border:2px solid black; display:flex; align-items:center; justify-content:center; font-family:monospace; font-size:32px;">`)
+	// HUD counters
+	html.WriteString(fmt.Sprintf(`<span id="score-value" hx-swap-oob="innerHTML">%d</span>`, g.Score))
+	html.WriteString(fmt.Sprintf(`<span id="server-fps-value" hx-swap-oob="innerHTML">%.0f</span>`, g.CurrentFPS))
+	html.WriteString(fmt.Sprintf(`<span id="client-fps-value" hx-swap-oob="innerHTML">%.0f</span>`, g.ClientFPS))
+	html.WriteString(fmt.Sprintf(`<span id="latency-value" hx-swap-oob="innerHTML">%.0f</span>`, g.AvgLatency))
+	html.WriteString(fmt.Sprintf(`<span id="session-id-value" hx-swap-oob="innerHTML">%s</span>`, g.shortSessionID()))
 
-		// Show explosion for spaceship if it just died
-		if g.SpaceshipDead && time.Since(g.SpaceshipDeathTime) < 500*time.Millisecond {
-			spaceshipY := int(g.GameHeight - 50)
-			html.WriteString(fmt.Sprintf(
-				`<img src="/static/explosion-spaceship.svg" style="position:absolute; left:%dpx; top:%dpx; width:32px; height:32px;">`,
-				int(math.Round(g.SpaceshipX)), spaceshipY))
-		}
+	// Frame metadata for piggyback acknowledgements
+	html.WriteString(fmt.Sprintf(`<div id="frame-info" hx-swap-oob="outerHTML" data-frame-id="%d"></div>`, g.FrameID))
 
-		html.WriteString(`GAME OVER`)
-		html.WriteString(`</div>`)
-	} else {
-		html.WriteString(`<div id="game-container" style="position:relative; width:360px; height:480px; border:2px solid black; background:white;">`)
-
-		// FPS and latency display inside canvas
-		html.WriteString(fmt.Sprintf(
-			`<div style="position:absolute; top:5px; right:5px; font-family:monospace; font-size:10px; text-align:right; z-index:10;">
-				S:%.0f<br>
-				C:%.0f<br>
-				L:%.0fms
-			</div>`,
-			g.CurrentFPS, g.ClientFPS, g.AvgLatency))
-
-		// Score and session display inside canvas
-		html.WriteString(fmt.Sprintf(
-			`<div style="position:absolute; top:5px; left:5px; font-family:monospace; font-size:12px; z-index:10;">
-				Score: %d<br>
-				<span style="font-size:8px; color:#666;">Session: %s</span>
-			</div>`,
-			g.Score, g.SessionID[:8]))
-
-		// Render spaceship or its explosion
-		spaceshipY := int(g.GameHeight - 50)
-		if g.SpaceshipDead && time.Since(g.SpaceshipDeathTime) < 500*time.Millisecond {
-			html.WriteString(fmt.Sprintf(
-				`<img src="/static/explosion-spaceship.svg" style="position:absolute; left:%dpx; top:%dpx; width:32px; height:32px;">`,
-				int(math.Round(g.SpaceshipX)), spaceshipY))
-		} else if !g.SpaceshipDead {
-			html.WriteString(fmt.Sprintf(
-				`<img src="/static/spaceship.svg" style="position:absolute; left:%dpx; top:%dpx; width:32px; height:32px;">`,
-				int(math.Round(g.SpaceshipX)), spaceshipY))
-		}
-
-		// Render alien or its explosion
-		if g.AlienDead && time.Since(g.AlienDeathTime) < 500*time.Millisecond {
-			// Show explosion for 500ms
-			html.WriteString(fmt.Sprintf(
-				`<img src="/static/explosion-alien.svg" style="position:absolute; left:%dpx; top:%dpx; width:32px; height:32px;">`,
-				int(math.Round(g.AlienX)), int(math.Round(g.AlienY))))
-		} else if !g.AlienDead {
-			// Show normal alien
-			html.WriteString(fmt.Sprintf(
-				`<img src="/static/alien.svg" style="position:absolute; left:%dpx; top:%dpx; width:32px; height:32px;">`,
-				int(math.Round(g.AlienX)), int(math.Round(g.AlienY))))
-		}
-
-		// Render bullets
-		for _, bullet := range g.Bullets {
-			html.WriteString(fmt.Sprintf(
-				`<img src="/static/bullet.svg" style="position:absolute; left:%dpx; top:%dpx; width:4px; height:12px;">`,
-				int(math.Round(bullet.X)), int(math.Round(bullet.Y))))
-		}
-
-		// Add frame acknowledgment form that will be handled by the global event listener
-		html.WriteString(fmt.Sprintf(
-			`<form id="frame-ack-%d" ws-send hx-trigger="load" style="display:none;"></form>`,
-			g.FrameID))
-
-		html.WriteString(`</div>`)
+	// Track which bullets are visible so we only re-render when the set changes
+	currentBullets := make(map[int]struct{}, len(g.Bullets))
+	for _, bullet := range g.Bullets {
+		currentBullets[bullet.ID] = struct{}{}
 	}
 
+	if !bulletSetEqual(currentBullets, g.VisibleBullets) {
+		html.WriteString(`<div id="bullet-layer" hx-swap-oob="innerHTML">`)
+		for _, bullet := range g.Bullets {
+			html.WriteString(fmt.Sprintf(`<img id="bullet-%d" class="sprite bullet" src="/static/bullet.svg" alt="Bullet">`, bullet.ID))
+		}
+		html.WriteString(`</div>`)
+	}
+	g.VisibleBullets = currentBullets
+
+	// Update sprite states with minimal swaps
+	spaceshipState := g.determineSpaceshipSprite()
+	if spaceshipState != g.LastSpaceshipSprite {
+		html.WriteString(renderSpaceshipSwap(spaceshipState))
+		g.LastSpaceshipSprite = spaceshipState
+	}
+
+	alienState := g.determineAlienSprite()
+	if alienState != g.LastAlienSprite {
+		html.WriteString(renderAlienSwap(alienState))
+		g.LastAlienSprite = alienState
+	}
+
+	if g.GameOver != g.LastGameOver {
+		html.WriteString(renderOverlaySwap(g.GameOver))
+		g.LastGameOver = g.GameOver
+	}
+
+	// Position updates via CSS transforms
+	spaceshipY := g.GameHeight - 50
+	html.WriteString(`<style id="sprite-style" hx-swap-oob="outerHTML">`)
+	html.WriteString(fmt.Sprintf(`#spaceship-sprite{transform:translate(%.2fpx, %.2fpx);}`, g.SpaceshipX, spaceshipY))
+	html.WriteString(fmt.Sprintf(`#alien-sprite{transform:translate(%.2fpx, %.2fpx);}`, g.AlienX, g.AlienY))
+	for _, bullet := range g.Bullets {
+		html.WriteString(fmt.Sprintf(`#bullet-%d{transform:translate(%.2fpx, %.2fpx);}`, bullet.ID, bullet.X, bullet.Y))
+	}
+	html.WriteString(`</style>`)
+
 	return html.String()
+}
+
+func (g *Game) shortSessionID() string {
+	if len(g.SessionID) <= 8 {
+		return g.SessionID
+	}
+	return g.SessionID[:8]
+}
+
+func renderSpaceshipSwap(state string) string {
+	switch state {
+	case "exploding":
+		return `<img id="spaceship-sprite" class="sprite" src="/static/explosion-spaceship.svg" alt="Spaceship explosion" hx-swap-oob="outerHTML">`
+	case "hidden":
+		return `<img id="spaceship-sprite" class="sprite sprite-hidden" src="/static/spaceship.svg" alt="Spaceship" hx-swap-oob="outerHTML">`
+	default:
+		return `<img id="spaceship-sprite" class="sprite" src="/static/spaceship.svg" alt="Spaceship" hx-swap-oob="outerHTML">`
+	}
+}
+
+func renderAlienSwap(state string) string {
+	switch state {
+	case "exploding":
+		return `<img id="alien-sprite" class="sprite" src="/static/explosion-alien.svg" alt="Alien explosion" hx-swap-oob="outerHTML">`
+	case "hidden":
+		return `<img id="alien-sprite" class="sprite sprite-hidden" src="/static/alien.svg" alt="Alien" hx-swap-oob="outerHTML">`
+	default:
+		return `<img id="alien-sprite" class="sprite" src="/static/alien.svg" alt="Alien" hx-swap-oob="outerHTML">`
+	}
+}
+
+func renderOverlaySwap(visible bool) string {
+	className := "game-overlay"
+	if visible {
+		className += " is-visible"
+	}
+	return fmt.Sprintf(`<div id="game-overlay" class="%s" hx-swap-oob="outerHTML"><div class="game-over-text">GAME OVER</div></div>`, className)
+}
+
+func (g *Game) determineSpaceshipSprite() string {
+	if g.SpaceshipDead {
+		if time.Since(g.SpaceshipDeathTime) < 500*time.Millisecond {
+			return "exploding"
+		}
+		return "hidden"
+	}
+	return "alive"
+}
+
+func (g *Game) determineAlienSprite() string {
+	if g.AlienDead {
+		if time.Since(g.AlienDeathTime) < 500*time.Millisecond {
+			return "exploding"
+		}
+		return "hidden"
+	}
+	return "alive"
+}
+
+func bulletSetEqual(a, b map[int]struct{}) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for id := range a {
+		if _, ok := b[id]; !ok {
+			return false
+		}
+	}
+	return true
 }

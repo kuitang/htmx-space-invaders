@@ -99,9 +99,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Game loop - 144 FPS
+	// Game loop - 60 FPS
 	lastFrame := time.Now()
-	ticker := time.NewTicker(time.Duration(1000/144) * time.Millisecond) // ~144 FPS
+	ticker := time.NewTicker(time.Second / 60)
 	defer ticker.Stop()
 
 	for {
@@ -110,14 +110,21 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if msg.Action == "ack" && msg.FrameID != "" {
-				// Handle frame acknowledgment
+			handled := false
+			if msg.FrameID != "" {
 				if frameID, err := strconv.ParseUint(msg.FrameID, 10, 64); err == nil {
 					session.Game.ProcessFrameAck(frameID)
-					session.UpdateLastActive()
+					handled = true
 				}
-			} else {
+			}
+
+			switch msg.Action {
+			case "left", "right", "shoot":
 				session.Game.ProcessInput(msg.Action, msg.Type)
+				handled = true
+			}
+
+			if handled {
 				session.UpdateLastActive()
 			}
 

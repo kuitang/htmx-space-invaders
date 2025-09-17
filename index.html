@@ -8,38 +8,51 @@
 </head>
 <body>
     <div class="game-wrapper" hx-ext="ws" ws-connect="/game">
-        <div id="game-container" style="position:relative; width:360px; height:480px; border:2px solid black; margin: 0 auto; box-sizing: border-box;">
-            <!-- Game objects will be rendered here -->
+        <div id="game-container">
+            <div id="hud">
+                <div class="hud-line">Score: <span id="score-value">0</span></div>
+                <div class="hud-line">Session: <span id="session-id-value"></span></div>
+            </div>
+            <div id="metrics">
+                <div>S: <span id="server-fps-value">0</span></div>
+                <div>C: <span id="client-fps-value">0</span></div>
+                <div>L: <span id="latency-value">0</span>ms</div>
+            </div>
+            <div id="sprite-layer">
+                <img id="spaceship-sprite" class="sprite" src="/static/spaceship.svg" alt="Spaceship" width="32" height="32">
+                <img id="alien-sprite" class="sprite" src="/static/alien.svg" alt="Alien" width="32" height="32">
+                <div id="bullet-layer"></div>
+            </div>
+            <div id="game-overlay" class="game-overlay">
+                <div class="game-over-text">GAME OVER</div>
+            </div>
         </div>
 
-        <!-- Mobile controls (hidden by default) -->
+        <style id="sprite-style"></style>
+        <div id="frame-info" data-frame-id="0"></div>
+
         <div class="control-area" id="controls">
             <div class="control-left">
-                <!-- Left button -->
                 <button class="control-btn" id="left-btn">
                     <img src="/static/arrow-left.svg" alt="Left" style="width: 24px; height: 24px;">
                 </button>
-                <!-- Right button -->
                 <button class="control-btn" id="right-btn">
                     <img src="/static/arrow-right.svg" alt="Right" style="width: 24px; height: 24px;">
                 </button>
             </div>
             <div class="control-right">
-                <!-- Fire button with crosshair icon -->
                 <button class="control-btn fire-btn" id="fire-btn">
                     <img src="/static/crosshair.svg" alt="Fire" style="width: 24px; height: 24px;">
                 </button>
             </div>
         </div>
 
-        <!-- Hidden forms for touch controls -->
         <form id="left-down" ws-send style="display:none;"></form>
         <form id="left-up" ws-send style="display:none;"></form>
         <form id="right-down" ws-send style="display:none;"></form>
         <form id="right-up" ws-send style="display:none;"></form>
         <form id="fire-down" ws-send style="display:none;"></form>
 
-        <!-- Hidden forms for keyboard events -->
         <form id="key-left-down" ws-send hx-trigger="keydown[key=='ArrowLeft'] from:body" style="display:none;"></form>
         <form id="key-left-up" ws-send hx-trigger="keyup[key=='ArrowLeft'] from:body" style="display:none;"></form>
         <form id="key-right-down" ws-send hx-trigger="keydown[key=='ArrowRight'] from:body" style="display:none;"></form>
@@ -51,147 +64,85 @@
     <script src="https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.2"></script>
 
     <script>
-    // Configure all WebSocket forms to send proper JSON messages
     document.addEventListener('DOMContentLoaded', function() {
-        // Set up a global handler for frame acknowledgments
-        document.body.addEventListener('htmx:wsConfigSend', function(e) {
-            // Check if this is a frame acknowledgment form
-            if (e.target && e.target.id && e.target.id.startsWith('frame-ack-')) {
-                var frameId = e.target.id.replace('frame-ack-', '');
-                e.detail.messageBody = JSON.stringify({
-                    action: 'ack',
-                    frameId: frameId,
-                    HEADERS: e.detail.headers
-                });
+        function currentFrameId() {
+            var frameInfo = document.getElementById('frame-info');
+            return frameInfo ? (frameInfo.dataset.frameId || '') : '';
+        }
+
+        function wireForm(id, action, type) {
+            var form = document.getElementById(id);
+            if (!form) {
+                return;
             }
-        });
-        // Configure keyboard input forms
-        document.getElementById('key-left-down').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'left',
-                type: 'keydown',
-                HEADERS: e.detail.headers
+            form.addEventListener('htmx:wsConfigSend', function(e) {
+                var frameId = currentFrameId();
+                var message = { action: action, HEADERS: e.detail.headers };
+                if (type) {
+                    message.type = type;
+                }
+                if (frameId) {
+                    message.frameId = frameId;
+                }
+                e.detail.messageBody = JSON.stringify(message);
             });
+        }
+
+        [
+            ['key-left-down', 'left', 'keydown'],
+            ['key-left-up', 'left', 'keyup'],
+            ['key-right-down', 'right', 'keydown'],
+            ['key-right-up', 'right', 'keyup'],
+            ['key-shoot', 'shoot', 'keydown'],
+            ['left-down', 'left', 'keydown'],
+            ['left-up', 'left', 'keyup'],
+            ['right-down', 'right', 'keydown'],
+            ['right-up', 'right', 'keyup'],
+            ['fire-down', 'shoot', 'keydown']
+        ].forEach(function(entry) {
+            wireForm(entry[0], entry[1], entry[2]);
         });
 
-        document.getElementById('key-left-up').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'left',
-                type: 'keyup',
-                HEADERS: e.detail.headers
-            });
-        });
-
-        document.getElementById('key-right-down').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'right',
-                type: 'keydown',
-                HEADERS: e.detail.headers
-            });
-        });
-
-        document.getElementById('key-right-up').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'right',
-                type: 'keyup',
-                HEADERS: e.detail.headers
-            });
-        });
-
-        document.getElementById('key-shoot').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'shoot',
-                type: 'keydown',
-                HEADERS: e.detail.headers
-            });
-        });
-
-        // Configure touch control forms
-        document.getElementById('left-down').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'left',
-                type: 'keydown',
-                HEADERS: e.detail.headers
-            });
-        });
-
-        document.getElementById('left-up').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'left',
-                type: 'keyup',
-                HEADERS: e.detail.headers
-            });
-        });
-
-        document.getElementById('right-down').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'right',
-                type: 'keydown',
-                HEADERS: e.detail.headers
-            });
-        });
-
-        document.getElementById('right-up').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'right',
-                type: 'keyup',
-                HEADERS: e.detail.headers
-            });
-        });
-
-        document.getElementById('fire-down').addEventListener('htmx:wsConfigSend', function(e) {
-            e.detail.messageBody = JSON.stringify({
-                action: 'shoot',
-                type: 'keydown',
-                HEADERS: e.detail.headers
-            });
-        });
-    });
-
-    // Mobile detection and control display
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth <= 768;
-
-    // Always show controls for testing - remove the if statement
-    //if (isMobile) {
         document.body.classList.add('mobile');
-        document.getElementById('controls').style.display = 'flex';
+        var controls = document.getElementById('controls');
+        if (controls) {
+            controls.style.display = 'flex';
+        }
 
-        // Setup touch controls
         function setupTouchControl(btnId, actionName) {
-            const btn = document.getElementById(btnId);
-            const downForm = document.getElementById(actionName + '-down');
-            const upForm = document.getElementById(actionName + '-up');
+            var btn = document.getElementById(btnId);
+            var downForm = document.getElementById(actionName + '-down');
+            var upForm = document.getElementById(actionName + '-up');
 
-            // Touch/mouse down
-            ['touchstart', 'mousedown'].forEach(evt => {
+            if (!btn || !downForm) {
+                return;
+            }
+
+            ['touchstart', 'mousedown'].forEach(function(evt) {
                 btn.addEventListener(evt, function(e) {
                     e.preventDefault();
-                    // Trigger HTMX to send message
                     htmx.trigger(downForm, 'submit');
                 });
             });
 
-            // Touch/mouse up
-            ['touchend', 'mouseup', 'touchcancel', 'mouseleave'].forEach(evt => {
+            ['touchend', 'mouseup', 'touchcancel', 'mouseleave'].forEach(function(evt) {
                 btn.addEventListener(evt, function(e) {
                     e.preventDefault();
-                    // Only send up event for left/right, not fire
-                    if (actionName !== 'fire') {
+                    if (actionName !== 'fire' && upForm) {
                         htmx.trigger(upForm, 'submit');
                     }
                 });
-            })
+            });
         }
 
         setupTouchControl('left-btn', 'left');
         setupTouchControl('right-btn', 'right');
         setupTouchControl('fire-btn', 'fire');
-    //}
 
-    // Prevent touch gestures that might interfere with game
-    document.addEventListener('touchmove', function(e) {
-        e.preventDefault();
-    }, { passive: false });
+        document.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+    });
     </script>
 </body>
 </html>

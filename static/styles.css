@@ -17,8 +17,100 @@ body {
 }
 
 #game-container {
+    position: relative;
+    width: 360px;
+    height: 480px;
+    border: 2px solid black;
+    margin: 0 auto;
     background-color: white;
-    box-sizing: border-box !important;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+#hud {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    font-size: 12px;
+    font-family: monospace;
+    z-index: 10;
+}
+
+.hud-line {
+    line-height: 1.2;
+}
+
+#metrics {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    font-size: 10px;
+    font-family: monospace;
+    text-align: right;
+    z-index: 10;
+}
+
+#sprite-layer {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.sprite {
+    position: absolute;
+    left: 0;
+    top: 0;
+    will-change: transform;
+    transform: translateZ(0);
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+.sprite-hidden {
+    visibility: hidden;
+}
+
+#spaceship-sprite,
+#alien-sprite {
+    width: 32px;
+    height: 32px;
+}
+
+#bullet-layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.bullet {
+    width: 4px;
+    height: 12px;
+}
+
+.game-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: monospace;
+    font-size: 32px;
+    background: rgba(255, 255, 255, 0.92);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.game-overlay.is-visible {
+    opacity: 1;
+}
+
+.game-over-text {
+    letter-spacing: 4px;
 }
 
 img {
