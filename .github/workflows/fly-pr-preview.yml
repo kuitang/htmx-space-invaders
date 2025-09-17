@@ -1,0 +1,35 @@
+name: PR Preview Deployment
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+env:
+  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+jobs:
+  preview:
+    name: Deploy PR Preview
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pr-${{ github.event.number }}
+    environment:
+      name: pr-${{ github.event.number }}
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy Preview App
+        id: deploy
+        uses: superfly/fly-pr-review-apps@master
+        with:
+          name: pr-${{ github.event.number }}-space-invaders
+          region: ewr
+          org: personal
+          update: true
+          config: fly.toml
+          vmsize: shared-cpu-1x
+          memory: 256
+          cpukind: shared
+          cpu: 1

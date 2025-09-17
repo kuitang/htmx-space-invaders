@@ -1,0 +1,42 @@
+# Git files
+.git/
+.gitignore
+
+# Go build cache and binary
+htmx-space-invaders
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+test.html
+
+# CI/CD
+.github/
+fly.toml
+
+# Documentation
+README.md
+CLAUDE.md
+*.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Playwright testing
+.playwright-mcp/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
