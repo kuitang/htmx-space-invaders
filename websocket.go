@@ -16,6 +16,8 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+var sessionManager = &SessionManager{}
+
 type InputMessage struct {
 	Action  string
 	Type    string
@@ -30,10 +32,31 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	game := NewGame()
+	// Create session
+	session := &Session{
+		ID:         generateSessionID(),
+		Conn:       conn,
+		Game:       NewGame(),
+		InputChan:  make(chan InputMessage, 10),
+		Done:       make(chan struct{}),
+		CreatedAt:  time.Now(),
+		LastActive: time.Now(),
+	}
 
-	// Channel for incoming messages
-	inputChan := make(chan InputMessage, 10)
+	// Set session ID in game
+	session.Game.SessionID = session.ID
+
+	// Register session
+	sessionManager.sessions.Store(session.ID, session)
+	defer func() {
+		sessionManager.sessions.Delete(session.ID)
+		close(session.Done)
+		log.Printf("Session %s ended", session.ID)
+	}()
+
+	log.Printf("Session %s started", session.ID)
+
+	inputChan := session.InputChan
 
 	// Start goroutine to read messages
 	go func() {
@@ -90,10 +113,12 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if msg.Action == "ack" && msg.FrameID != "" {
 				// Handle frame acknowledgment
 				if frameID, err := strconv.ParseUint(msg.FrameID, 10, 64); err == nil {
-					game.ProcessFrameAck(frameID)
+					session.Game.ProcessFrameAck(frameID)
+					session.UpdateLastActive()
 				}
 			} else {
-				game.ProcessInput(msg.Action, msg.Type)
+				session.Game.ProcessInput(msg.Action, msg.Type)
+				session.UpdateLastActive()
 			}
 
 		case <-ticker.C:
@@ -103,14 +128,14 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			lastFrame = now
 
 			// Update game state
-			game.Update(deltaTime)
+			session.Game.Update(deltaTime)
 
 			// Increment frame ID and track send time
-			game.FrameID++
-			game.FrameSentTimes[game.FrameID] = now
+			session.Game.FrameID++
+			session.Game.FrameSentTimes[session.Game.FrameID] = now
 
 			// Render HTML with OOB swaps
-			html := game.RenderHTML()
+			html := session.Game.RenderHTML()
 
 			// Send HTML to client
 			err := conn.WriteMessage(websocket.TextMessage, []byte(html))

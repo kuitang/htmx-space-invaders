@@ -59,6 +59,9 @@ type Game struct {
 	AvgLatency      float64
 	LastAckTime     time.Time
 	AckCount        int
+
+	// Session tracking
+	SessionID       string
 }
 
 func NewGame() *Game {
@@ -308,10 +311,13 @@ func (g *Game) RenderHTML() string {
 			</div>`,
 			g.CurrentFPS, g.ClientFPS, g.AvgLatency))
 
-		// Score display inside canvas
+		// Score and session display inside canvas
 		html.WriteString(fmt.Sprintf(
-			`<div style="position:absolute; top:5px; left:5px; font-family:monospace; font-size:12px; z-index:10;">Score: %d</div>`,
-			g.Score))
+			`<div style="position:absolute; top:5px; left:5px; font-family:monospace; font-size:12px; z-index:10;">
+				Score: %d<br>
+				<span style="font-size:8px; color:#666;">Session: %s</span>
+			</div>`,
+			g.Score, g.SessionID[:8]))
 
 		// Render spaceship or its explosion
 		spaceshipY := int(g.GameHeight - 50)
