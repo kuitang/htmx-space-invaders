@@ -1,0 +1,113 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: monospace;
+    background-color: #f0f0f0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.game-wrapper {
+    width: 360px;
+    height: 560px;
+    position: relative;
+}
+
+#game-container {
+    background-color: white;
+    box-sizing: border-box !important;
+}
+
+img {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+/* Control area - hidden by default */
+.control-area {
+    display: none;
+    width: 360px;
+    height: 90px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #2a2a2a 100%);
+    position: relative;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    box-sizing: border-box;
+    margin: 0 auto;
+}
+
+.control-left {
+    display: flex;
+    gap: 12px;
+}
+
+.control-right {
+    display: flex;
+}
+
+.control-btn {
+    width: 44pt;
+    height: 44pt;
+    font-size: 28pt;
+    font-weight: normal;
+    background: linear-gradient(145deg, #3a3a3a, #2a2a2a);
+    color: #f0f0f0;
+    border: none;
+    border-radius: 50%;
+    box-shadow:
+        3px 3px 6px #191919,
+        -3px -3px 6px #3a3a3a,
+        inset 1px 1px 2px rgba(255,255,255,0.1);
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.1s ease;
+    font-family: monospace;
+}
+
+.control-btn:active {
+    background: linear-gradient(145deg, #2a2a2a, #3a3a3a);
+    box-shadow:
+        inset 3px 3px 6px #191919,
+        inset -3px -3px 6px #3a3a3a;
+    transform: scale(0.95);
+}
+
+.fire-btn {
+    width: 44pt;
+    height: 44pt;
+    background: linear-gradient(145deg, #8b2020, #6b1818);
+    font-size: 24pt;
+}
+
+.fire-btn:active {
+    background: linear-gradient(145deg, #6b1818, #8b2020);
+}
+
+/* Mobile-specific styles */
+.mobile .control-area {
+    display: flex;
+}
+
+/* Prevent text selection and touch delays */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure game stays centered */
+@media (max-height: 600px) {
+    body {
+        align-items: flex-start;
+        padding-top: 10px;
+    }
+}

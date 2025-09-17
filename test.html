@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <div hx-ext="ws" ws-connect="/game">
+        <h2>WebSocket Test</h2>
+
+        <!-- Simple test form -->
+        <form ws-send>
+            <input name="action" value="test">
+            <input name="type" value="manual">
+            <button type="submit">Send Test Message</button>
+        </form>
+
+        <!-- Test with explicit message body -->
+        <button ws-send
+                hx-trigger="click"
+                hx-on:htmx:ws-config-send="console.log('Event:', event); event.detail.messageBody = {action: 'test2', type: 'click'}">
+            Test with Custom Message
+        </button>
+
+        <div id="game-container">
+            Game container
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/htmx.org@2.0.0/dist/htmx.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.2"></script>
+
+    <script>
+        document.body.addEventListener('htmx:wsConfigSend', function(evt) {
+            console.log('wsConfigSend event:', evt.detail);
+        });
+
+        document.body.addEventListener('htmx:wsBeforeSend', function(evt) {
+            console.log('wsBeforeSend event:', evt.detail);
+        });
+    </script>
+</body>
+</html>
