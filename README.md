@@ -20,7 +20,7 @@ A Space Invaders game built with HTMX and server-side rendering, demonstrating t
 
 ## Running the Game
 
-1. Install Go (1.19 or higher)
+1. Install Go (1.26.10 or a newer supported patch)
 2. Clone the repository
 3. Run the server:
    ```bash
